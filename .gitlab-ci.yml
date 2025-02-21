@@ -1,0 +1,44 @@
+---
+stages:
+  - test
+  - build
+  - publish
+
+run_tests:
+  stage: test
+  image: python:3.10-slim
+  before_script:
+    - pip install --upgrade pip
+    - pip install .[test]
+  script:
+    - coverage run -m pytest
+    - coverage report
+    - coverage xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+
+build_package:
+  stage: build
+  image: python:3.10-slim
+  before_script:
+    - pip install --upgrade pip build
+  script:
+    - python3 -m build
+  artifacts:
+    paths:
+      - dist/
+
+publish_package:
+  stage: publish
+  only:
+    - main
+  image: python:3.10-slim
+  before_script:
+    - pip install --upgrade pip twine
+  script:
+    # uses environment variables TWINE_USERNAME and TWINE_PASSWORD implicitly
+    - python3 -m twine upload --verbose dist/*

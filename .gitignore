@@ -1,0 +1,7 @@
+__pycache__
+.coverage
+.vscode
+dist/
+venv/
+model
+model.lock
