@@ -11,7 +11,13 @@ import requests
 
 from . import anonymizer
 
-logger = logging.getLogger(__name__)
+__all__ = [
+    "InferenceResource",
+    "supervised_learning_anonymizer_server_factory",
+    "validate_anonymizer_input_or_raise",
+]
+
+_logger = logging.getLogger(__name__)
 
 
 class InferenceResource:
@@ -103,7 +109,7 @@ class InferenceResource:
         batch_size = req.get_param_as_int(
             "batch_size", default=self._default_batch_size
         )
-        logger.debug(
+        _logger.debug(
             f"Inferring targets for feature array with shape {X.shape} and "
             f"dtype {X.dtype}. Using batch size {batch_size}"
         )
@@ -126,13 +132,13 @@ class InferenceResource:
         )
 
         X = array[self._expected_array_label]
-        logger.debug(
+        _logger.debug(
             f"Received feature array for evaluation with shape {X.shape} and dtype "
             f"{X.dtype}. Inferring its targets using batch size "
             f"{self._default_batch_size}"
         )
         prediction = self._loaded_model.predict(X, self._default_batch_size)
-        logger.debug(
+        _logger.debug(
             f"Inferred targets for evaluation. The target's shape is {prediction.shape}"
             f" and its dtype is {prediction.dtype}"
         )

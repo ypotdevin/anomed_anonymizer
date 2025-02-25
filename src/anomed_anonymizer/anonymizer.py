@@ -6,6 +6,15 @@ from typing import Any, Callable
 
 import numpy as np
 
+__all__ = [
+    "SupervisedLearningAnonymizer",
+    "TFKerasWrapper",
+    "WrappedAnonymizer",
+    "batch_views",
+    "pickle_anonymizer",
+    "unpickle_anonymizer",
+]
+
 
 class SupervisedLearningAnonymizer(ABC):
     """A base class for anonymizers (privacy preserving machine learning models)

@@ -5,3 +5,5 @@ dist/
 venv/
 model
 model.lock
+docs/_build
+docs/apidocs
