@@ -1,5 +1,6 @@
 from .anonymizer import (
     SupervisedLearningAnonymizer,
+    TabularDataAnonymizer,
     TFKerasWrapper,
     WrappedAnonymizer,
     batch_views,
@@ -19,6 +20,7 @@ __all__ = [
     "supervised_learning_anonymizer_server_factory",
     "SupervisedLearningAnonymizer",
     "unpickle_anonymizer",
+    "TabularDataAnonymizer",
     "TFKerasWrapper",
     "validate_anonymizer_input_or_raise",
     "WrappedAnonymizer",

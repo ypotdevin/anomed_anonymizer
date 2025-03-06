@@ -4,15 +4,18 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Callable
 
+import anomed_challenge
 import numpy as np
+import pandas as pd
 
 __all__ = [
-    "SupervisedLearningAnonymizer",
-    "TFKerasWrapper",
-    "WrappedAnonymizer",
     "batch_views",
     "pickle_anonymizer",
+    "SupervisedLearningAnonymizer",
+    "TabularDataAnonymizer",
+    "TFKerasWrapper",
     "unpickle_anonymizer",
+    "WrappedAnonymizer",
 ]
 
 
@@ -277,3 +280,34 @@ def batch_views(array: np.ndarray, batch_size: int | None) -> list[np.ndarray]:
         assert 0 < batch_size < n
         indices = range(batch_size, n, batch_size)
         return np.split(array, indices)
+
+
+class TabularDataAnonymizer(ABC):
+    """A base class for anonymizing schemes that process leaky data to provide
+    anonymized data.
+
+    This class is intended to be used to contribute to challenges of type
+    `TabularDataResconstructionChallenge`. That implies the anonymized data has
+    to respect one of the schemes denoted by `AnonymizationScheme`.
+
+    Subclasses need to define a way to anonymize the leaky data, respecting one
+    of the predefined anonymizing schemes.
+    """
+
+    @abstractmethod
+    def anonymize(
+        self, leaky_data: pd.DataFrame
+    ) -> tuple[pd.DataFrame, anomed_challenge.AnonymizationScheme]:
+        """Anonymize leaky tabular data.
+
+        Parameters
+        ----------
+        leaky_data : pd.DataFrame
+            The tabular data to anonymize.
+
+        Returns
+        -------
+        (anon_data, scheme) : tuple[pd.DataFrame, anomed_challenge.AnonymizationScheme]
+            The anonymized data and the used anonymization scheme.
+        """
+        pass

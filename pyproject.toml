@@ -12,8 +12,15 @@ authors = [{ name = "Yannik Potdevin", email = "ypo.uzl@proton.me" }]
 maintainers = [{ name = "Yannik Potdevin", email = "ypo.uzl@proton.me" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-version = "0.0.20"
-dependencies = ["anomed-utils", "falcon~=4.0", "numpy~=1.26", "requests~=2.32"]
+version = "0.0.21"
+dependencies = [
+    "anomed-challenge",
+    "anomed-utils",
+    "falcon~=4.0",
+    "numpy~=1.26",
+    "pandas~=2.2",
+    "requests~=2.32",
+]
 classifiers = [
     "Development Status :: 1 - Planning",
     "Intended Audience :: Developers",
