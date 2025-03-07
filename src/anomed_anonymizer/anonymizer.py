@@ -287,7 +287,7 @@ class TabularDataAnonymizer(ABC):
     anonymized data.
 
     This class is intended to be used to contribute to challenges of type
-    `TabularDataResconstructionChallenge`. That implies the anonymized data has
+    `TabularDataReconstructionChallenge`. That implies the anonymized data has
     to respect one of the schemes denoted by `AnonymizationScheme`.
 
     Subclasses need to define a way to anonymize the leaky data, respecting one
