@@ -1,10 +1,12 @@
 from pathlib import Path
 
+import anomed_challenge as challenge
 import numpy as np
+import pandas as pd
 import pytest
 from sklearn.naive_bayes import GaussianNB
 
-from anomed_anonymizer import anonymizer
+import anomed_anonymizer as anonymizer
 
 
 @pytest.fixture()
@@ -69,6 +71,26 @@ def partial_dummy_anonymizer():
 @pytest.fixture()
 def complete_dummy_anonymizer():
     return CompleteDummy()
+
+
+@pytest.fixture()
+def example_float_df():
+    return pd.DataFrame(data=np.arange(10, dtype=float))
+
+
+class DummyTabularDataAnonymizer(anonymizer.TabularDataAnonymizer):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def anonymize(
+        self, _: pd.DataFrame
+    ) -> tuple[pd.DataFrame, challenge.AnonymizationScheme]:
+        return (pd.DataFrame(), "same")
+
+
+@pytest.fixture()
+def example_tabular_data_anonymizer():
+    return DummyTabularDataAnonymizer()
 
 
 def dummy_validation_function(_: np.ndarray) -> None:
@@ -257,3 +279,43 @@ def test_batch_views(empty_ndarray: np.ndarray, ten_elem_ndarray: np.ndarray):
 
     batches = anonymizer.batch_views(ten_elem_ndarray, 3)
     assert np.array_equal(np.concatenate(batches), ten_elem_ndarray)
+
+
+def test_TabularDataAnonymizer(example_tabular_data_anonymizer, example_float_df):
+    empty_df = pd.DataFrame()
+    anon_df, anon_scheme = example_tabular_data_anonymizer.anonymize(example_float_df)
+    assert empty_df.equals(anon_df)
+    assert anon_scheme == "same"
+
+
+def test_PersistingTabularDataAnonymizer(
+    example_tabular_data_anonymizer, tmp_path, example_float_df
+):
+    persisting_anon = anonymizer.PersistingTabularDataAnonymizer(
+        example_tabular_data_anonymizer, output_dir=tmp_path
+    )
+    persisting_anon.anonymize(example_float_df)
+    empty_df = pd.DataFrame()
+    assert empty_df.equals(persisting_anon.get_anon_data())
+    assert persisting_anon.get_anon_scheme() == "same"
+
+    del persisting_anon
+    persisting_anon = anonymizer.PersistingTabularDataAnonymizer(
+        example_tabular_data_anonymizer, output_dir=tmp_path
+    )
+    # see whether this works although `persisting_anon.anonymize` hasn't been
+    # called
+    assert empty_df.equals(persisting_anon.get_anon_data())
+    assert persisting_anon.get_anon_scheme() == "same"
+
+
+def test_failing_PersistingTabularDataAnonymizer(
+    example_tabular_data_anonymizer, tmp_path, example_float_df
+):
+    persisting_anon = anonymizer.PersistingTabularDataAnonymizer(
+        example_tabular_data_anonymizer, output_dir=tmp_path
+    )
+    with pytest.raises(RuntimeError):
+        persisting_anon.get_anon_data()
+    with pytest.raises(RuntimeError):
+        persisting_anon.get_anon_scheme()
