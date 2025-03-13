@@ -2,9 +2,11 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import anomed_challenge as challenge
 import anomed_utils as utils
 import falcon
 import numpy as np
+import pandas as pd
 import pytest
 import requests
 from falcon import testing
@@ -85,6 +87,39 @@ def client(dummy_anonymizer, dummy_server_args):
     )
 
 
+@pytest.fixture()
+def example_float_df():
+    return pd.DataFrame(data=np.arange(10, dtype=float))
+
+
+class DummyTabularDataAnonymizer(anonymizer.TabularDataAnonymizer):
+    def __init__(self) -> None:
+        super().__init__()
+
+    def anonymize(
+        self, _: pd.DataFrame
+    ) -> tuple[pd.DataFrame, challenge.AnonymizationScheme]:
+        return (pd.DataFrame(), "same")
+
+
+@pytest.fixture()
+def example_tabular_data_anonymizer():
+    return DummyTabularDataAnonymizer()
+
+
+@pytest.fixture()
+def tabular_data_anon_client(example_tabular_data_anonymizer, tmp_path):
+    return testing.TestClient(
+        app=anonymizer.tabular_data_anonymizer_server_factory(
+            anonymizer_identifier="example_anonymizer",
+            anonymizer_obj=example_tabular_data_anonymizer,
+            output_dir=tmp_path,
+            leaky_data_url="http://example.com/leaky",
+            utility_evaluation_url="http://example.com/utility",
+        )
+    )
+
+
 # @pytest.fixture()
 # def long_fit_client(dummy_long_fit_anonymizer, dummy_server_args):
 #     return testing.TestClient(
@@ -96,10 +131,15 @@ def client(dummy_anonymizer, dummy_server_args):
 #     )
 
 
-def test_availability(client):
+def _is_available(client_) -> bool:
     message = {"message": "Anonymizer server is alive!"}
-    response = client.simulate_get("/")
-    assert response.json == message
+    response = client_.simulate_get("/")
+    return response.json == message
+
+
+def test_availability(client, tabular_data_anon_client):
+    assert _is_available(client)
+    assert _is_available(tabular_data_anon_client)
 
 
 def test_successful_fit_invocation(client, mocker, example_dataset, dummy_server_args):
@@ -235,11 +275,11 @@ def test_failing_utility_evaluation_bad_request(client, mocker, example_dataset)
     assert response.status == falcon.HTTP_BAD_REQUEST
 
 
-def _mock_post_json(_mocker, _json, status_code: int = 201) -> MagicMock:
-    mock_response = _mocker.MagicMock()
+def _mock_post_json(mocker_, _json, status_code: int = 201) -> MagicMock:
+    mock_response = mocker_.MagicMock()
     mock_response.status_code = status_code
     mock_response.json.return_value = _json
-    return _mocker.patch("requests.post", return_value=mock_response)
+    return mocker_.patch("requests.post", return_value=mock_response)
 
 
 def test_successful_predict(
@@ -279,3 +319,65 @@ def test_failing_predict_bad_request(client, mocker, example_dataset, example_fe
         ),
     )
     assert response.status == falcon.HTTP_BAD_REQUEST
+
+
+def test_TabularDataAnonymizerFitResource(
+    tabular_data_anon_client, mocker, example_float_df
+):
+    mock = _mock_get_dataframe(mocker, example_float_df)
+    response = tabular_data_anon_client.simulate_post("/fit")
+    assert (
+        response.status == falcon.HTTP_CREATED
+        and response.json["message"] == "Anonymization has been completed successfully."
+    )
+    mock.assert_called_once()
+
+
+def _mock_get_dataframe(mocker_, df: pd.DataFrame, status_code: int = 200) -> MagicMock:
+    mock_response = mocker_.MagicMock()
+    mock_response.status_code = status_code
+    mock_response.content = utils.dataframe_to_bytes(df)
+    return mocker_.patch("requests.get", return_value=mock_response)
+
+
+def test_TabularDataAnonymizerEvaluationResource(
+    tabular_data_anon_client, mocker, example_float_df
+):
+    leaky_data_mock = _mock_get_dataframe(mocker, example_float_df)
+    tabular_data_anon_client.simulate_post("/fit")
+    leaky_data_mock.assert_called_once()
+
+    mock_json_utility_data = {"usefulness": 42.0}
+    json_mock = _mock_post_json(mocker, mock_json_utility_data)
+    response = tabular_data_anon_client.simulate_post("/evaluate")
+
+    assert response.status_code == 201
+    assert response.json == dict(
+        message="The anonymized data's utility has been evaluated.",
+        evaluation=mock_json_utility_data,
+    )
+    json_mock.assert_called_once()
+
+
+def test_TabularDataAnonymizerDataResource(
+    tabular_data_anon_client, mocker, example_float_df
+):
+    leaky_data_mock = _mock_get_dataframe(mocker, example_float_df)
+    tabular_data_anon_client.simulate_post("/fit")
+    leaky_data_mock.assert_called_once()
+
+    response = tabular_data_anon_client.simulate_get("/anon_data")
+    assert response.status == falcon.HTTP_OK
+    assert pd.DataFrame().equals(utils.bytes_to_dataframe(response.content))
+
+
+def test_tabular_data_anonymizer_server_factory(
+    tabular_data_anon_client, mocker, example_float_df
+):
+    leaky_data_mock = _mock_get_dataframe(mocker, example_float_df)
+    tabular_data_anon_client.simulate_post("/fit")
+    leaky_data_mock.assert_called_once()
+
+    response = tabular_data_anon_client.simulate_get("/anon_data_scheme")
+    assert response.status == falcon.HTTP_OK
+    assert response.json == dict(scheme="same")

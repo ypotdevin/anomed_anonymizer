@@ -14,6 +14,7 @@ from . import anonymizer
 __all__ = [
     "InferenceResource",
     "supervised_learning_anonymizer_server_factory",
+    "tabular_data_anonymizer_server_factory",
     "validate_anonymizer_input_or_raise",
 ]
 
@@ -353,3 +354,172 @@ def _get_anonymizer_fit_data(
         return training_data
 
     return getter
+
+
+class TabularDataAnonymizerFitResource:
+    def __init__(
+        self,
+        persisting_anon: anonymizer.PersistingTabularDataAnonymizer,
+        leaky_data_url: str,
+        timeout: float,
+    ) -> None:
+        self._persisting_anonymizer = persisting_anon
+        self._leaky_data_url = leaky_data_url
+        self._timeout = timeout
+
+    def on_post(self, req: falcon.Request, resp: falcon.Response) -> None:
+        leaky_data = utils.get_dataframe_or_raise(
+            self._leaky_data_url, timeout=self._timeout
+        )
+        self._persisting_anonymizer.anonymize(leaky_data)
+        success_message = "Anonymization has been completed successfully."
+        _logger.debug(success_message)
+        resp.status = falcon.HTTP_CREATED
+        resp.text = json.dumps(dict(message=success_message))
+
+
+class TabularDataAnonymizerEvaluationResource:
+    def __init__(
+        self,
+        anonymizer_identifier: str,
+        persisting_anon: anonymizer.PersistingTabularDataAnonymizer,
+        utility_evaluation_url: str,
+        timeout: float,
+    ) -> None:
+        self._anon_id = anonymizer_identifier
+        self._persisting_anon = persisting_anon
+        self._utility_evaluation_url = utility_evaluation_url
+        self._timeout = timeout
+
+    def on_post(self, req: falcon.Request, resp: falcon.Response):
+        try:
+            parts = dict(
+                anon_data=utils.dataframe_to_bytes(
+                    self._persisting_anon.get_anon_data()
+                ),
+                anon_scheme=self._persisting_anon.get_anon_scheme(),
+            )
+        except RuntimeError:
+            raise falcon.HTTPServiceUnavailable(
+                description="No anonymized data present so far.",
+            )
+
+        body, ct_header = utils.encode_multiple_parts(parts)
+        try:
+            evaluation_response = requests.post(
+                url=self._utility_evaluation_url,
+                params=dict(anonymizer=self._anon_id),
+                data=body,
+                headers=ct_header,
+                timeout=self._timeout,
+            )
+            if evaluation_response.status_code != 201:
+                raise ValueError
+            resp.text = json.dumps(
+                dict(
+                    message=("The anonymized data's utility has been evaluated."),
+                    evaluation=evaluation_response.json(),
+                )
+            )
+            resp.status = falcon.HTTP_CREATED
+        except ValueError:
+            raise falcon.HTTPInternalServerError(
+                description="Utility evaluation failed."
+            )
+        except requests.Timeout:
+            raise falcon.HTTPServiceUnavailable(
+                description="Challenge currently not available for evaluation."
+            )
+
+
+class TabularDataAnonymizerDataResource:
+    def __init__(
+        self, persisting_anonymizer: anonymizer.PersistingTabularDataAnonymizer
+    ) -> None:
+        self._persisting_anon = persisting_anonymizer
+
+    def on_get_data(self, req, resp):
+        resp.data = utils.dataframe_to_bytes(self._persisting_anon.get_anon_data())
+
+    def on_get_scheme(self, req, resp):
+        resp.text = json.dumps(dict(scheme=self._persisting_anon.get_anon_scheme()))
+
+
+def tabular_data_anonymizer_server_factory(
+    anonymizer_identifier: str,
+    anonymizer_obj: anonymizer.TabularDataAnonymizer,
+    output_dir: str | Path,
+    leaky_data_url: str,
+    utility_evaluation_url: str,
+    download_timeout: float = 10.0,
+    upload_timeout: float = 10.0,
+) -> falcon.App:
+    """A factory to create a web application object which hosts an
+    `anonymizer.TabularDataAnonymizer`, ... TODO.
+
+    By using this factory, you don't have to worry any web-programming issues,
+    as they are hidden from you. The generated web app will feature the
+    following routes:
+
+    * [GET] `/`
+    * [POST] `/fit`
+    * [POST] `/evaluate`
+    * [GET] `/anon_data`
+    * [GET] `/anon_data_scheme`
+
+    Parameters
+    ----------
+    anonymizer_identifier : str
+        The identifier for the
+    anonymizer_obj : anonymizer.TabularDataAnonymizer
+        The tabular data anonymizer to lift to a web application.
+    leaky_data_url : str
+        Where to obtain leaky data from (usually, this points to an API of
+        the challenge you are submitting your anonymizer to).
+    utility_evaluation_url : str
+        Where to send the anonymized data and the anonymization scheme to for
+        utility evaluation.
+    download_timeout : float, optional
+        The time in seconds to wait before a download connection is considered
+        faulty. By default 10.0. You might want to increase this if you expect
+        that it takes some time to download the training data from the
+        challenge.
+    upload_timeout : float, optional
+        The time in seconds to wait before an upload connection is considered
+        faulty. By default 10.0. You might want to increase this if you expect
+        that it takes some time to upload predictions to the challenge.
+
+    Returns
+    -------
+    falcon.App
+        A web application object based on the falcon web framework.
+    """
+    app = falcon.App()
+
+    app.add_route(
+        "/", utils.StaticJSONResource(dict(message="Anonymizer server is alive!"))
+    )
+    persisting_anon = anonymizer.PersistingTabularDataAnonymizer(
+        anonymizer_obj, output_dir=output_dir
+    )
+    app.add_route(
+        "/fit",
+        TabularDataAnonymizerFitResource(
+            persisting_anon=persisting_anon,
+            leaky_data_url=leaky_data_url,
+            timeout=download_timeout,
+        ),
+    )
+    app.add_route(
+        "/evaluate",
+        TabularDataAnonymizerEvaluationResource(
+            anonymizer_identifier=anonymizer_identifier,
+            persisting_anon=persisting_anon,
+            utility_evaluation_url=utility_evaluation_url,
+            timeout=upload_timeout,
+        ),
+    )
+    tabular_data_res = TabularDataAnonymizerDataResource(persisting_anon)
+    app.add_route("/anon_data", tabular_data_res, suffix="data")
+    app.add_route("/anon_data_scheme", tabular_data_res, suffix="scheme")
+    return app

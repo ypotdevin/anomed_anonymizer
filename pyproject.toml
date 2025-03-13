@@ -12,7 +12,7 @@ authors = [{ name = "Yannik Potdevin", email = "ypo.uzl@proton.me" }]
 maintainers = [{ name = "Yannik Potdevin", email = "ypo.uzl@proton.me" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
     "anomed-challenge",
     "anomed-utils",
@@ -41,6 +41,8 @@ test = [
     "scikit-learn~=1.6",
 ]
 tfkeras = ["tf_keras~=2.18"]
+
+torch = ["torch~=2.6"]
 
 [tool.coverage.run]
 branch = true
