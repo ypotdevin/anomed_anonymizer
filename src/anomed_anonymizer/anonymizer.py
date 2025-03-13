@@ -1,4 +1,6 @@
 import inspect
+import json
+import logging
 import pickle
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -7,9 +9,11 @@ from typing import Any, Callable
 import anomed_challenge
 import numpy as np
 import pandas as pd
+from filelock import FileLock
 
 __all__ = [
     "batch_views",
+    "PersistingTabularDataAnonymizer",
     "pickle_anonymizer",
     "SupervisedLearningAnonymizer",
     "TabularDataAnonymizer",
@@ -17,6 +21,8 @@ __all__ = [
     "unpickle_anonymizer",
     "WrappedAnonymizer",
 ]
+
+_logger = logging.getLogger(__name__)
 
 
 class SupervisedLearningAnonymizer(ABC):
@@ -311,3 +317,55 @@ class TabularDataAnonymizer(ABC):
             The anonymized data and the used anonymization scheme.
         """
         pass
+
+
+class PersistingTabularDataAnonymizer:
+    def __init__(
+        self, tabular_data_anonymizer: TabularDataAnonymizer, output_dir: str | Path
+    ) -> None:
+        self._tabular_data_anonymizer = tabular_data_anonymizer
+        self._anon_data_path = Path(output_dir) / "anon_data.parquet"
+        self._anon_scheme_path = Path(output_dir) / "anon_scheme.json"
+        self._anon_data_lock = FileLock(
+            self._anon_data_path.with_suffix(".lock"),
+            blocking=False,
+        )
+        self._anon_data: pd.DataFrame | None = None
+        self._anon_scheme: anomed_challenge.AnonymizationScheme | None = None
+
+    def anonymize(self, leaky_data: pd.DataFrame) -> None:
+        with self._anon_data_lock:
+            _logger.debug("Anonymizing tabular data.")
+            self._anon_data, self._anon_scheme = (
+                self._tabular_data_anonymizer.anonymize(leaky_data)
+            )
+            _logger.debug("Persisting anonymized data and anonymization scheme.")
+            self._anon_data.to_parquet(path=self._anon_data_path, engine="pyarrow")
+            with open(self._anon_scheme_path, "w", encoding="utf8") as scheme_file:
+                json.dump(dict(scheme=self._anon_scheme), scheme_file)
+
+    def get_anon_data(self) -> pd.DataFrame:
+        if self._anon_data is not None:
+            return self._anon_data
+        if self._anon_data_path.exists():
+            # This case only should happen if the web app was re-created and a
+            # persisted model already exists.
+            with self._anon_data_lock:
+                df = pd.read_parquet(self._anon_data_path, engine="pyarrow")
+                self._anon_data = df
+            return self._anon_data
+        raise RuntimeError(
+            "Anonymized data unavailable. Need to invoke anonymization before."
+        )
+
+    def get_anon_scheme(self) -> anomed_challenge.AnonymizationScheme:
+        if self._anon_scheme is not None:
+            return self._anon_scheme
+        if self._anon_scheme_path.exists():
+            with self._anon_data_lock:
+                with open(self._anon_scheme_path, "r", encoding="utf8") as scheme_file:
+                    self._anon_scheme = json.load(scheme_file)["scheme"]
+            return self._anon_scheme  # type: ignore
+        raise RuntimeError(
+            "Anonymization scheme unavailable. Need to invoke anonymization before."
+        )
