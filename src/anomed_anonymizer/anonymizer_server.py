@@ -67,10 +67,10 @@ class InferenceResource:
             Where to submit the target values this anonymizer inferred from the
             validation data features (usually, this points to an API of the
             challenge you are submitting your anonymizer to).
-        download_timeout : float, optional
+        download_timeout : float
             The time in seconds to wait before a download connection is
             considered faulty.
-        upload_timeout : float, optional
+        upload_timeout : float
             The time in seconds to wait before an upload connection is
             considered faulty.
         """
