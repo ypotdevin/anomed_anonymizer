@@ -12,7 +12,7 @@ authors = [{ name = "Yannik Potdevin", email = "ypo.uzl@proton.me" }]
 maintainers = [{ name = "Yannik Potdevin", email = "ypo.uzl@proton.me" }]
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-version = "0.0.22"
+version = "0.0.23"
 dependencies = [
     "anomed-challenge",
     "anomed-utils",

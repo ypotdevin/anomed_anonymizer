@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -19,6 +20,7 @@ __all__ = [
 ]
 
 _logger = logging.getLogger(__name__)
+ANONYMIZER_ID: str = os.getenv("ANONYMIZER_ID")  # type: ignore
 
 
 class InferenceResource:
@@ -196,7 +198,6 @@ def _is_older(dt1: datetime | None, dt2: datetime) -> bool:
 
 
 def supervised_learning_anonymizer_server_factory(
-    anonymizer_identifier: str,
     anonymizer_obj: anonymizer.SupervisedLearningAnonymizer,
     model_filepath: str | Path,
     default_batch_size: int,
@@ -225,8 +226,6 @@ def supervised_learning_anonymizer_server_factory(
 
     Parameters
     ----------
-    anonymizer_identifier : str
-        Passed to `InferenceResource`.
     anonymizer_obj : anonymizer.SupervisedLearningAnonymizer
         An anonymizer that is based on the supervised learning paradigm.
     model_filepath : str | Path
@@ -278,7 +277,7 @@ def supervised_learning_anonymizer_server_factory(
         ),
     )
     ir = InferenceResource(
-        anonymizer_identifier=anonymizer_identifier,
+        anonymizer_identifier=ANONYMIZER_ID,
         model_filepath=model_filepath,
         model_loader=model_loader,
         default_batch_size=default_batch_size,
@@ -446,7 +445,6 @@ class TabularDataAnonymizerDataResource:
 
 
 def tabular_data_anonymizer_server_factory(
-    anonymizer_identifier: str,
     anonymizer_obj: anonymizer.TabularDataAnonymizer,
     output_dir: str | Path,
     leaky_data_url: str,
@@ -469,8 +467,6 @@ def tabular_data_anonymizer_server_factory(
 
     Parameters
     ----------
-    anonymizer_identifier : str
-        The identifier for the
     anonymizer_obj : anonymizer.TabularDataAnonymizer
         The tabular data anonymizer to lift to a web application.
     leaky_data_url : str
@@ -513,7 +509,7 @@ def tabular_data_anonymizer_server_factory(
     app.add_route(
         "/evaluate",
         TabularDataAnonymizerEvaluationResource(
-            anonymizer_identifier=anonymizer_identifier,
+            anonymizer_identifier=ANONYMIZER_ID,
             persisting_anon=persisting_anon,
             utility_evaluation_url=utility_evaluation_url,
             timeout=upload_timeout,
